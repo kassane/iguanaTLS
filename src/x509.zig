@@ -740,7 +740,7 @@ const PEMSectionIteratorOptions = struct {
 fn PEMSectionIterator(comptime Reader: type, comptime options: PEMSectionIteratorOptions) type {
     var biggest_name_len = 0;
 
-    var fields: [options.section_names.len + 2]std.builtin.TypeInfo.EnumField = undefined;
+    var fields: [options.section_names.len + 2]std.builtin.Type.EnumField = undefined;
     fields[0] = .{ .name = "none", .value = 0 };
     fields[1] = .{ .name = "other", .value = 1 };
     for (fields[2..]) |*field, idx| {
@@ -902,8 +902,8 @@ pub const NameElement = struct {
     },
 };
 
-const github_pem = @embedFile("../test/github.pem");
-const github_der = @embedFile("../test/github.der");
+const github_pem = @embedFile("test/github.pem");
+const github_der = @embedFile("test/github.der");
 
 fn expected_pem_certificate_chain(bytes: []const u8, certs: []const []const u8) !void {
     var fbs = std.io.fixedBufferStream(bytes);

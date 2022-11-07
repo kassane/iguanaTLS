@@ -408,7 +408,6 @@ fn add_cert_extensions(state: *VerifierCaptureState, tag: u8, length: usize, rea
 
 fn add_cert_extension(state: *VerifierCaptureState, tag: u8, length: usize, reader: anytype) !void {
     _ = tag;
-    _ = length;
 
     const start = state.fbs.pos;
 
@@ -525,7 +524,6 @@ fn set_signature_algorithm(state: *VerifierCaptureState, tag: u8, length: usize,
 
 fn set_signature_value(state: *VerifierCaptureState, tag: u8, length: usize, reader: anytype) !void {
     _ = tag;
-    _ = length;
 
     const unused_bits = try reader.readByte();
     const bit_count = (length - 1) * 8 - unused_bits;
@@ -922,7 +920,7 @@ pub const curves = struct {
     }
 
     fn KeyPair(comptime list: anytype) type {
-        var fields: [list.len]std.builtin.TypeInfo.UnionField = undefined;
+        var fields: [list.len]std.builtin.Type.UnionField = undefined;
         for (list) |curve, i| {
             fields[i] = .{
                 .name = curve.name,
@@ -935,7 +933,7 @@ pub const curves = struct {
                 .layout = .Extern,
                 .tag_type = null,
                 .fields = &fields,
-                .decls = &[0]std.builtin.TypeInfo.Declaration{},
+                .decls = &[0]std.builtin.Type.Declaration{},
             },
         });
     }
@@ -1057,7 +1055,7 @@ pub fn client_connect(
             } ++ ([1]u8{undefined} ** 32) ++ [_]u8{
                 // Session ID
                 0x00,
-            } ++ mem.toBytes(@byteSwap(u16, ciphersuite_bytes));
+            } ++ mem.toBytes(@byteSwap(@as(u16, ciphersuite_bytes)));
             // using .* = mem.asBytes(...).* or mem.writeIntBig didn't work...
 
             // Same as above, couldnt achieve this with a single buffer.
@@ -1070,7 +1068,7 @@ pub fn client_connect(
                 if (cs.hash != .sha256)
                     @compileError("Non SHA256 hash algorithm is not supported yet.");
 
-                ciphersuite_buf = ciphersuite_buf ++ mem.toBytes(@byteSwap(u16, cs.tag));
+                ciphersuite_buf = ciphersuite_buf ++ mem.toBytes(@byteSwap(@as(u16, cs.tag)));
             }
 
             var ending_part: [13]u8 = [_]u8{
@@ -1090,7 +1088,7 @@ pub fn client_connect(
             break :blk starting_part ++ ciphersuite_buf ++ ending_part;
         };
 
-        var msg_buf = client_hello_start.ptr[0..client_hello_start.len].*;
+        var msg_buf = client_hello_start[0..client_hello_start.len].*;
         mem.writeIntBig(u16, msg_buf[3..5], @intCast(u16, alpn_bytes + hostname.len + 0x55 + ciphersuite_bytes + curvelist_bytes));
         mem.writeIntBig(u24, msg_buf[6..9], @intCast(u24, alpn_bytes + hostname.len + 0x51 + ciphersuite_bytes + curvelist_bytes));
         mem.copy(u8, msg_buf[11..43], &client_random);
@@ -1761,6 +1759,14 @@ pub fn Client(
             return .{ .context = self };
         }
 
+        fn getLenOverhead(self: @This()) usize {
+            inline for (_ciphersuites) |cs| {
+                if (self.ciphersuite == cs.tag) {
+                    return cs.mac_length + cs.prefix_data_length;
+                }
+            } else unreachable;
+        }
+
         pub fn read(self: *@This(), buffer: []u8) ReaderError!usize {
             const buf_size = 1024;
 
@@ -1771,11 +1777,7 @@ pub fn Client(
                         else => |e| return e,
                     };
 
-                    const len_overhead = inline for (_ciphersuites) |cs| {
-                        if (self.ciphersuite == cs.tag) {
-                            break cs.mac_length + cs.prefix_data_length;
-                        }
-                    } else unreachable;
+                    const len_overhead = self.getLenOverhead();
 
                     const rec_length = header.len();
                     if (rec_length < len_overhead)
@@ -1953,7 +1955,7 @@ test "HTTPS request on wikipedia main page" {
     const sock = try std.net.tcpConnectToHost(std.testing.allocator, "en.wikipedia.org", 443);
     defer sock.close();
 
-    var fbs = std.io.fixedBufferStream(@embedFile("../test/DigiCertHighAssuranceEVRootCA.crt.pem"));
+    var fbs = std.io.fixedBufferStream(@embedFile("test/DigiCertHighAssuranceEVRootCA.crt.pem"));
     var trusted_chain = try x509.CertificateChain.from_pem(std.testing.allocator, fbs.reader());
     defer trusted_chain.deinit();
 
@@ -2012,7 +2014,7 @@ test "HTTPS request on wikipedia alternate name" {
     const sock = try std.net.tcpConnectToHost(std.testing.allocator, "en.m.wikipedia.org", 443);
     defer sock.close();
 
-    var fbs = std.io.fixedBufferStream(@embedFile("../test/DigiCertHighAssuranceEVRootCA.crt.pem"));
+    var fbs = std.io.fixedBufferStream(@embedFile("test/DigiCertHighAssuranceEVRootCA.crt.pem"));
     var trusted_chain = try x509.CertificateChain.from_pem(std.testing.allocator, fbs.reader());
     defer trusted_chain.deinit();
 
@@ -2020,7 +2022,7 @@ test "HTTPS request on wikipedia alternate name" {
     var rand_impl = blk: {
         var seed: [std.rand.DefaultCsprng.secret_seed_length]u8 = undefined;
         try std.os.getrandom(&seed);
-        break :blk &std.rand.DefaultCsprng.init(seed);
+        break :blk std.rand.DefaultCsprng.init(seed);
     };
     const rand = rand_impl.random();
 
@@ -2046,7 +2048,7 @@ test "HTTPS request on twitch oath2 endpoint" {
     var rand_impl = blk: {
         var seed: [std.rand.DefaultCsprng.secret_seed_length]u8 = undefined;
         try std.os.getrandom(&seed);
-        break :blk &std.rand.DefaultCsprng.init(seed);
+        break :blk std.rand.DefaultCsprng.init(seed);
     };
     const rand = rand_impl.random();
 
@@ -2087,7 +2089,7 @@ test "Connecting to expired.badssl.com returns an error" {
     const sock = try std.net.tcpConnectToHost(std.testing.allocator, "expired.badssl.com", 443);
     defer sock.close();
 
-    var fbs = std.io.fixedBufferStream(@embedFile("../test/DigiCertGlobalRootCA.crt.pem"));
+    var fbs = std.io.fixedBufferStream(@embedFile("test/DigiCertGlobalRootCA.crt.pem"));
     var trusted_chain = try x509.CertificateChain.from_pem(std.testing.allocator, fbs.reader());
     defer trusted_chain.deinit();
 
@@ -2095,7 +2097,7 @@ test "Connecting to expired.badssl.com returns an error" {
     var rand_impl = blk: {
         var seed: [std.rand.DefaultCsprng.secret_seed_length]u8 = undefined;
         try std.os.getrandom(&seed);
-        break :blk &std.rand.DefaultCsprng.init(seed);
+        break :blk std.rand.DefaultCsprng.init(seed);
     };
     const rand = rand_impl.random();
 
@@ -2117,7 +2119,7 @@ test "Connecting to wrong.host.badssl.com returns an error" {
     const sock = try std.net.tcpConnectToHost(std.testing.allocator, "wrong.host.badssl.com", 443);
     defer sock.close();
 
-    var fbs = std.io.fixedBufferStream(@embedFile("../test/DigiCertGlobalRootCA.crt.pem"));
+    var fbs = std.io.fixedBufferStream(@embedFile("test/DigiCertGlobalRootCA.crt.pem"));
     var trusted_chain = try x509.CertificateChain.from_pem(std.testing.allocator, fbs.reader());
     defer trusted_chain.deinit();
 
@@ -2125,7 +2127,7 @@ test "Connecting to wrong.host.badssl.com returns an error" {
     var rand_impl = blk: {
         var seed: [std.rand.DefaultCsprng.secret_seed_length]u8 = undefined;
         try std.os.getrandom(&seed);
-        break :blk &std.rand.DefaultCsprng.init(seed);
+        break :blk std.rand.DefaultCsprng.init(seed);
     };
     const rand = rand_impl.random();
 
@@ -2147,7 +2149,7 @@ test "Connecting to self-signed.badssl.com returns an error" {
     const sock = try std.net.tcpConnectToHost(std.testing.allocator, "self-signed.badssl.com", 443);
     defer sock.close();
 
-    var fbs = std.io.fixedBufferStream(@embedFile("../test/DigiCertGlobalRootCA.crt.pem"));
+    var fbs = std.io.fixedBufferStream(@embedFile("test/DigiCertGlobalRootCA.crt.pem"));
     var trusted_chain = try x509.CertificateChain.from_pem(std.testing.allocator, fbs.reader());
     defer trusted_chain.deinit();
 
@@ -2155,7 +2157,7 @@ test "Connecting to self-signed.badssl.com returns an error" {
     var rand_impl = blk: {
         var seed: [std.rand.DefaultCsprng.secret_seed_length]u8 = undefined;
         try std.os.getrandom(&seed);
-        break :blk &std.rand.DefaultCsprng.init(seed);
+        break :blk std.rand.DefaultCsprng.init(seed);
     };
     const rand = rand_impl.random();
 
@@ -2177,7 +2179,7 @@ test "Connecting to client.badssl.com with a client certificate" {
     const sock = try std.net.tcpConnectToHost(std.testing.allocator, "client.badssl.com", 443);
     defer sock.close();
 
-    var fbs = std.io.fixedBufferStream(@embedFile("../test/DigiCertGlobalRootCA.crt.pem"));
+    var fbs = std.io.fixedBufferStream(@embedFile("test/DigiCertGlobalRootCA.crt.pem"));
     var trusted_chain = try x509.CertificateChain.from_pem(std.testing.allocator, fbs.reader());
     defer trusted_chain.deinit();
 
@@ -2185,13 +2187,14 @@ test "Connecting to client.badssl.com with a client certificate" {
     var rand_impl = blk: {
         var seed: [std.rand.DefaultCsprng.secret_seed_length]u8 = undefined;
         try std.os.getrandom(&seed);
-        break :blk &std.rand.DefaultCsprng.init(seed);
+        break :blk std.rand.DefaultCsprng.init(seed);
     };
     const rand = rand_impl.random();
 
+    var badssl_fbs = std.io.fixedBufferStream(@embedFile("test/badssl.com-client.pem"));
     var client_cert = try x509.ClientCertificateChain.from_pem(
         std.testing.allocator,
-        std.io.fixedBufferStream(@embedFile("../test/badssl.com-client.pem")).reader(),
+        badssl_fbs.reader(),
     );
     defer client_cert.deinit(std.testing.allocator);
 

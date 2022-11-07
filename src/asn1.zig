@@ -622,7 +622,7 @@ pub const der = struct {
 };
 
 test "der.parse_value" {
-    const github_der = @embedFile("../test/github.der");
+    const github_der = @embedFile("test/github.der");
     var fbs = std.io.fixedBufferStream(github_der);
 
     var arena = ArenaAllocator.init(std.testing.allocator);
