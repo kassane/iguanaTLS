@@ -128,10 +128,11 @@ pub fn sign(
 
     const enc_buf = @ptrCast([*]u8, rsa_result.limbs.ptr)[0..signature_length];
     mem.reverse(u8, enc_buf);
-    return allocator.resize(
+    if (!allocator.resize(
         enc_buf.ptr[0 .. rsa_result.limbs.len * @sizeOf(usize)],
         signature_length,
-    ) orelse unreachable;
+    )) @panic("resize failed");
+    return enc_buf.ptr[0 .. signature_length];
 }
 
 pub fn verify_signature(
