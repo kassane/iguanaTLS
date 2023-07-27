@@ -97,7 +97,7 @@ pub const Value = union(Tag) {
             },
             .bit_string => |bs| {
                 try writer.print("BIT STRING ({} bits) ", .{bs.bit_len});
-                const bits_to_show = std.math.min(8 * 3, bs.bit_len);
+                const bits_to_show = @min(8 * 3, bs.bit_len);
                 const bytes = std.math.divCeil(usize, bits_to_show, 8) catch unreachable;
 
                 var bit_idx: usize = 0;
@@ -107,7 +107,7 @@ pub const Value = union(Tag) {
                     var cur_bit_idx: u3 = 0;
                     while (bit_idx < bits_to_show) {
                         const mask = @as(u8, 0x80) >> cur_bit_idx;
-                        try writer.print("{}", .{@boolToInt(byte & mask == mask)});
+                        try writer.print("{}", .{@intFromBool(byte & mask == mask)});
                         cur_bit_idx += 1;
                         bit_idx += 1;
                         if (cur_bit_idx == 7)
@@ -135,7 +135,7 @@ pub const Value = union(Tag) {
             .utc_time => |s| try writer.print("UTC TIME {}\n", .{s}),
             .bmp_string => |s| try writer.print("BMP STRING ({} words) {}\n", .{
                 s.len,
-                @ptrCast([*]const u16, s.ptr)[0 .. s.len * 2],
+                @as([*]const u16, s.ptr)[0 .. s.len * 2],
             }),
             .sequence => |children| {
                 try writer.print("SEQUENCE ({} elems)\n", .{children.len});
@@ -181,7 +181,7 @@ pub const der = struct {
     fn DERReader(comptime Reader: type) type {
         const S = struct {
             pub fn read(state: *DERReaderState(Reader), buffer: []u8) DecodeError(Reader)!usize {
-                const out_bytes = std.math.min(buffer.len, state.length - state.idx);
+                const out_bytes = @min(buffer.len, state.length - state.idx);
                 const res = try state.der_reader.readAll(buffer[0..out_bytes]);
                 state.idx += res;
                 return res;
@@ -250,7 +250,7 @@ pub const der = struct {
 
         const length = existing_length orelse try parse_length(der_reader);
         if (tag_literal == .sequence_of) {
-            if (tag_byte != @enumToInt(Tag.sequence)) {
+            if (tag_byte != @intFromEnum(Tag.sequence)) {
                 if (is_optional) return TagLength{ .tag = tag_byte, .length = length };
                 return error.InvalidTag;
             }
@@ -386,10 +386,10 @@ pub const der = struct {
     pub fn encode_length(length: usize) EncodedLength {
         var enc = EncodedLength{ .data = undefined, .len = 0 };
         if (length < 128) {
-            enc.data[0] = @truncate(u8, length);
+            enc.data[0] = @truncate(length);
             enc.len = 1;
         } else {
-            const bytes_needed = @intCast(u8, std.math.divCeil(
+            const bytes_needed: u8 = @intCast(std.math.divCeil(
                 usize,
                 std.math.log2_int_ceil(usize, length),
                 8,
@@ -429,10 +429,10 @@ pub const der = struct {
             // Positive number with highest bit set to 1 in the rest.
             const limb_count = std.math.divCeil(usize, length - 1, @sizeOf(usize)) catch unreachable;
             const limbs = try alloc.alloc(usize, limb_count);
-            std.mem.set(usize, limbs, 0);
+            @memset(limbs, 0);
             errdefer alloc.free(limbs);
 
-            var limb_ptr = @ptrCast([*]u8, limbs.ptr);
+            var limb_ptr: [*]u8 = @ptrCast(limbs.ptr);
             try der_reader.readNoEof(limb_ptr[0 .. length - 1]);
             // We always reverse because the standard library big int expects little endian.
             mem.reverse(u8, limb_ptr[0 .. length - 1]);
@@ -445,10 +445,10 @@ pub const der = struct {
         // Twos complement
         const limb_count = std.math.divCeil(usize, length, @sizeOf(usize)) catch unreachable;
         const limbs = try alloc.alloc(usize, limb_count);
-        std.mem.set(usize, limbs, 0);
+        @memset(limbs, 0);
         errdefer alloc.free(limbs);
 
-        var limb_ptr = @ptrCast([*]u8, limbs.ptr);
+        var limb_ptr: [*]u8 = @ptrCast(limbs.ptr);
         limb_ptr[0] = first_byte & ~@as(u8, 0x80);
         try der_reader.readNoEof(limb_ptr[1..length]);
 
@@ -470,7 +470,7 @@ pub const der = struct {
             // 1 byte value
             return first_byte;
         }
-        const length = @truncate(u7, first_byte);
+        const length: u7 = @truncate(first_byte);
         if (length > @sizeOf(usize))
             @panic("DER length does not fit in usize");
 

@@ -36,7 +36,7 @@ const RecordingAllocator = struct {
 
         self.stats.total_allocations += 1;
         self.stats.total_allocated += mem.len;
-        self.stats.peak_allocated = std.math.max(
+        self.stats.peak_allocated = @max(
             self.stats.peak_allocated,
             self.stats.total_allocated - self.stats.total_deallocated,
         );
@@ -56,7 +56,7 @@ const RecordingAllocator = struct {
         std.debug.assert(actual_len != 0);
         if (actual_len > buf.len) {
             self.stats.total_allocated += actual_len - buf.len;
-            self.stats.peak_allocated = std.math.max(
+            self.stats.peak_allocated = @max(
                 self.stats.peak_allocated,
                 self.stats.total_allocated - self.stats.total_deallocated,
             );
@@ -123,7 +123,7 @@ fn benchmark_run(
     random_recording: []const u8,
 ) !void {
     {
-        const warmup_time_secs = std.math.max(0.5, running_time / 20);
+        const warmup_time_secs = @max(0.5, running_time / 20);
         std.debug.print("Warming up for {d:.2} seconds...\n", .{warmup_time_secs});
         const warmup_time_ns = @floatToInt(i128, warmup_time_secs * std.time.ns_per_s);
 

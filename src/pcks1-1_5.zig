@@ -21,7 +21,7 @@ fn rsa_perform(
         usize,
         std.math.divCeil(usize, base.len, @sizeOf(usize)) catch unreachable,
     );
-    const curr_base_limb_bytes = @ptrCast([*]u8, curr_base_limbs)[0..base.len];
+    const curr_base_limb_bytes = @as([*]u8, @ptrCast(curr_base_limbs))[0..base.len];
     mem.copy(u8, curr_base_limb_bytes, base);
     mem.reverse(u8, curr_base_limb_bytes);
     var curr_base = (std.math.big.int.Mutable{
@@ -112,7 +112,7 @@ pub fn sign(
     // EM = 0x00 || 0x01 || PS || 0x00 || T
     sig_buf[0] = 0;
     sig_buf[1] = 1;
-    mem.set(u8, sig_buf[2 .. first_prefix_idx - 1], 0xff);
+    @memset(sig_buf[2 .. first_prefix_idx - 1], 0xff);
     sig_buf[first_prefix_idx - 1] = 0;
     mem.copy(u8, sig_buf[first_prefix_idx..first_hash_idx], prefix);
     mem.copy(u8, sig_buf[first_hash_idx..], hash);
@@ -126,7 +126,7 @@ pub fn sign(
         return null;
     }
 
-    const enc_buf = @ptrCast([*]u8, rsa_result.limbs.ptr)[0..signature_length];
+    const enc_buf = @as([*]u8, @ptrCast(rsa_result.limbs.ptr))[0..signature_length];
     mem.reverse(u8, enc_buf);
     if (!allocator.resize(
         enc_buf.ptr[0 .. rsa_result.limbs.len * @sizeOf(usize)],
@@ -158,7 +158,7 @@ pub fn verify_signature(
     if (rsa_result.limbs.len * @sizeOf(usize) < signature.data.len)
         return false;
 
-    const enc_buf = @ptrCast([*]u8, rsa_result.limbs.ptr)[0..signature.data.len];
+    const enc_buf = @as([*]u8, @ptrCast(rsa_result.limbs.ptr))[0..signature.data.len];
     mem.reverse(u8, enc_buf);
 
     if (enc_buf[0] != 0x00 or enc_buf[1] != 0x01)
