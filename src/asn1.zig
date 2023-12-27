@@ -40,7 +40,7 @@ pub const Value = union(Tag) {
     int: BigInt,
     bit_string: BitString,
     octet_string: []const u8,
-    @"null",
+    null,
     // @TODO Make this []u32, owned?
     object_identifier: ObjectIdentifier,
     utf8_string: []const u8,
@@ -119,7 +119,7 @@ pub const Value = union(Tag) {
                 try writer.writeByte('\n');
             },
             .octet_string => |s| try writer.print("OCTET STRING ({} bytes) {X}\n", .{ s.len, s }),
-            .@"null" => try writer.writeAll("NULL\n"),
+            .null => try writer.writeAll("NULL\n"),
             .object_identifier => |oid| {
                 try writer.writeAll("OBJECT IDENTIFIER ");
                 var i: u8 = 0;
@@ -231,17 +231,16 @@ pub const der = struct {
     ) !?TagLength {
         const Reader = @TypeOf(der_reader);
 
-        const isEnumLit = comptime std.meta.trait.is(.EnumLiteral);
         comptime var tag_idx = 0;
 
-        const has_capture = comptime isEnumLit(@TypeOf(schema[tag_idx])) and schema[tag_idx] == .capture;
+        const has_capture = comptime @typeInfo(@TypeOf(schema[tag_idx])) == .EnumLiteral and schema[tag_idx] == .capture;
         if (has_capture) tag_idx += 2;
 
-        const is_optional = comptime isEnumLit(@TypeOf(schema[tag_idx])) and schema[tag_idx] == .optional;
+        const is_optional = comptime @typeInfo(@TypeOf(schema[tag_idx])) == .EnumLiteral and schema[tag_idx] == .optional;
         if (is_optional) tag_idx += 1;
 
         const tag_literal = schema[tag_idx];
-        comptime std.debug.assert(isEnumLit(@TypeOf(tag_literal)));
+        comptime std.debug.assert(@typeInfo(@TypeOf(tag_literal)) == .EnumLiteral);
 
         const tag_byte = existing_tag_byte orelse (der_reader.readByte() catch |err| switch (err) {
             error.EndOfStream => return if (is_optional) null else error.EndOfStream,
@@ -294,7 +293,7 @@ pub const der = struct {
                 .idx = 0,
                 .length = length,
             };
-            var reader = DERReader(@TypeOf(der_reader)){ .context = &reader_state };
+            const reader = DERReader(@TypeOf(der_reader)){ .context = &reader_state };
             const capture_context = captures[schema[1] * 2];
             const capture_action = captures[schema[1] * 2 + 1];
             try capture_action(capture_context, tag_byte, length, reader);
@@ -319,7 +318,7 @@ pub const der = struct {
                     .idx = 0,
                     .length = length,
                 };
-                var reader = DERReader(Reader){ .context = &reader_state };
+                const reader = DERReader(Reader){ .context = &reader_state };
                 const capture_context = captures[schema[1] * 2];
                 const capture_action = captures[schema[1] * 2 + 1];
                 try capture_action(capture_context, tag_byte, length, reader);
@@ -352,7 +351,7 @@ pub const der = struct {
                 .idx = 0,
                 .length = length,
             };
-            var reader = DERReader(Reader){ .context = &reader_state };
+            const reader = DERReader(Reader){ .context = &reader_state };
             const capture_context = captures[schema[1] * 2];
             const capture_action = captures[schema[1] * 2 + 1];
             try capture_action(capture_context, tag_byte, length, reader);
@@ -395,12 +394,11 @@ pub const der = struct {
                 8,
             ) catch unreachable);
             enc.data[0] = bytes_needed | 0x80;
-            mem.copy(
-                u8,
+            @memcpy(
                 enc.data[1 .. bytes_needed + 1],
                 mem.asBytes(&length)[0..bytes_needed],
             );
-            if (builtin.target.cpu.arch.endian() != .Big) {
+            if (builtin.target.cpu.arch.endian() != .big) {
                 mem.reverse(u8, enc.data[1 .. bytes_needed + 1]);
             }
             enc.len = bytes_needed;
@@ -478,7 +476,7 @@ pub const der = struct {
         try der_reader.readNoEof(res_buf[0..length]);
         bytes_read.* += length;
 
-        if (builtin.target.cpu.arch.endian() != .Big) {
+        if (builtin.target.cpu.arch.endian() != .big) {
             mem.reverse(u8, res_buf[0..length]);
         }
         return mem.bytesToValue(usize, &res_buf);
@@ -496,7 +494,7 @@ pub const der = struct {
                 const length = try parse_length_internal(bytes_read, der_reader);
                 var cur_read_bytes: usize = 0;
                 var child = try alloc.create(Value);
-                errdefer alloc.destroy(child);
+                errdefer alloc.destroy(&child);
 
                 child.* = try parse_value_internal(alloc, &cur_read_bytes, der_reader);
                 if (cur_read_bytes != length)
@@ -541,9 +539,9 @@ pub const der = struct {
                     else => unreachable,
                 });
             },
-            .@"null" => {
+            .null => {
                 std.debug.assert((try parse_length_internal(bytes_read, der_reader)) == 0x00);
-                return .@"null";
+                return .null;
             },
             .object_identifier => {
                 const length = try parse_length_internal(bytes_read, der_reader);

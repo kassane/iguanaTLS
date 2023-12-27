@@ -22,7 +22,7 @@ fn rsa_perform(
         std.math.divCeil(usize, base.len, @sizeOf(usize)) catch unreachable,
     );
     const curr_base_limb_bytes = @as([*]u8, @ptrCast(curr_base_limbs))[0..base.len];
-    mem.copy(u8, curr_base_limb_bytes, base);
+    @memcpy(curr_base_limb_bytes, base);
     mem.reverse(u8, curr_base_limb_bytes);
     var curr_base = (std.math.big.int.Mutable{
         .limbs = curr_base_limbs,
@@ -114,8 +114,8 @@ pub fn sign(
     sig_buf[1] = 1;
     @memset(sig_buf[2 .. first_prefix_idx - 1], 0xff);
     sig_buf[first_prefix_idx - 1] = 0;
-    mem.copy(u8, sig_buf[first_prefix_idx..first_hash_idx], prefix);
-    mem.copy(u8, sig_buf[first_hash_idx..], hash);
+    @memcpy(sig_buf[first_prefix_idx..first_hash_idx], prefix);
+    @memcpy(sig_buf[first_hash_idx..], hash);
 
     const modulus = std.math.big.int.Const{ .limbs = private_key.rsa.modulus, .positive = true };
     const exponent = std.math.big.int.Const{ .limbs = private_key.rsa.exponent, .positive = true };
@@ -132,7 +132,7 @@ pub fn sign(
         enc_buf.ptr[0 .. rsa_result.limbs.len * @sizeOf(usize)],
         signature_length,
     )) @panic("resize failed");
-    return enc_buf.ptr[0 .. signature_length];
+    return enc_buf.ptr[0..signature_length];
 }
 
 pub fn verify_signature(

@@ -12,10 +12,10 @@ pub const ChaCha20Stream = struct {
     pub fn initContext(key: [8]u32, d: [4]u32) BlockVec {
         const c = "expand 32-byte k";
         const constant_le = comptime [4]u32{
-            mem.readIntLittle(u32, c[0..4]),
-            mem.readIntLittle(u32, c[4..8]),
-            mem.readIntLittle(u32, c[8..12]),
-            mem.readIntLittle(u32, c[12..16]),
+            mem.readInt(u32, c[0..4], .little),
+            mem.readInt(u32, c[4..8], .little),
+            mem.readInt(u32, c[8..12], .little),
+            mem.readInt(u32, c[12..16], .little),
         };
         return BlockVec{
             constant_le[0], constant_le[1], constant_le[2], constant_le[3],
@@ -41,7 +41,7 @@ pub const ChaCha20Stream = struct {
         };
     }
 
-    fn chacha20Core(x: *BlockVec, input: BlockVec) callconv(.Inline) void {
+    inline fn chacha20Core(x: *BlockVec, input: BlockVec) void {
         x.* = input;
 
         const rounds = comptime [_]QuarterRound{
@@ -70,17 +70,17 @@ pub const ChaCha20Stream = struct {
         }
     }
 
-    fn hashToBytes(out: *[64]u8, x: BlockVec) callconv(.Inline) void {
+    inline fn hashToBytes(out: *[64]u8, x: BlockVec) void {
         var i: usize = 0;
         while (i < 4) : (i += 1) {
-            mem.writeIntLittle(u32, out[16 * i + 0 ..][0..4], x[i * 4 + 0]);
-            mem.writeIntLittle(u32, out[16 * i + 4 ..][0..4], x[i * 4 + 1]);
-            mem.writeIntLittle(u32, out[16 * i + 8 ..][0..4], x[i * 4 + 2]);
-            mem.writeIntLittle(u32, out[16 * i + 12 ..][0..4], x[i * 4 + 3]);
+            mem.writeInt(u32, out[16 * i + 0 ..][0..4], x[i * 4 + 0], .little);
+            mem.writeInt(u32, out[16 * i + 4 ..][0..4], x[i * 4 + 1], .little);
+            mem.writeInt(u32, out[16 * i + 8 ..][0..4], x[i * 4 + 2], .little);
+            mem.writeInt(u32, out[16 * i + 12 ..][0..4], x[i * 4 + 3], .little);
         }
     }
 
-    fn contextFeedback(x: *BlockVec, ctx: BlockVec) callconv(.Inline) void {
+    inline fn contextFeedback(x: *BlockVec, ctx: BlockVec) void {
         var i: usize = 0;
         while (i < 16) : (i += 1) {
             x[i] +%= ctx[i];
@@ -105,8 +105,8 @@ pub const ChaCha20Stream = struct {
             mac.update(zeros[0..padding]);
         }
         var lens: [16]u8 = undefined;
-        mem.writeIntLittle(u64, lens[0..8], 13);
-        mem.writeIntLittle(u64, lens[8..16], len);
+        mem.writeInt(u64, lens[0..8], 13, .little);
+        mem.writeInt(u64, lens[8..16], len, .little);
         mac.update(lens[0..]);
         var computedTag: [16]u8 = undefined;
         mac.final(computedTag[0..]);
@@ -149,7 +149,7 @@ pub fn keyToWords(key: [32]u8) [8]u32 {
     var k: [8]u32 = undefined;
     var i: usize = 0;
     while (i < 8) : (i += 1) {
-        k[i] = mem.readIntLittle(u32, key[i * 4 ..][0..4]);
+        k[i] = mem.readInt(u32, key[i * 4 ..][0..4], .little);
     }
     return k;
 }
@@ -176,9 +176,9 @@ pub fn ctr(
         var counter: [BlockCipher.block_length]u8 = undefined;
         mem.writeInt(u128, &counter, counterInt.*, endian);
         var pad = [_]u8{0} ** block_length;
-        mem.copy(u8, pad[offset..], src[0..part_len]);
+        @memcpy(pad[offset..], src[0..part_len]);
         block_cipher.xor(&pad, &pad, counter);
-        mem.copy(u8, dst[0..part_len], pad[offset..][0..part_len]);
+        @memcpy(dst[0..part_len], pad[offset..][0..part_len]);
         cur_idx += part_len;
         idx.* += part_len;
         if (idx.* % block_length == 0)
@@ -216,9 +216,9 @@ pub fn ctr(
         mem.writeInt(u128, &counter, counterInt.*, endian);
 
         var pad = [_]u8{0} ** block_length;
-        mem.copy(u8, &pad, src[start_idx..][cur_idx..]);
+        @memcpy(&pad, src[start_idx..][cur_idx..]);
         block_cipher.xor(&pad, &pad, counter);
-        mem.copy(u8, dst[start_idx..][cur_idx..], pad[0 .. remaining - cur_idx]);
+        @memcpy(dst[start_idx..][cur_idx..], pad[0 .. remaining - cur_idx]);
 
         idx.* += remaining - cur_idx;
         if (idx.* % block_length == 0)
@@ -349,7 +349,7 @@ pub const ecc = struct {
         k: []const u8,
     ) ![Curve.point_len]u8 {
         var P: Jacobian(Curve) = undefined;
-        var res: u32 = decode_to_jacobian(Curve, &P, point);
+        const res: u32 = decode_to_jacobian(Curve, &P, point);
         point_mul(Curve, &P, k);
         var out: [Curve.point_len]u8 = undefined;
         encode_from_jacobian(Curve, &out, P);
@@ -432,10 +432,10 @@ pub const ecc = struct {
         P.* = Q;
     }
 
-    fn point_double(comptime Curve: type, P: *Jacobian(Curve)) callconv(.Inline) void {
+    inline fn point_double(comptime Curve: type, P: *Jacobian(Curve)) void {
         _ = run_code(Curve, P, P.*, &code.double);
     }
-    fn point_add(comptime Curve: type, P1: *Jacobian(Curve), P2: Jacobian(Curve)) callconv(.Inline) void {
+    inline fn point_add(comptime Curve: type, P1: *Jacobian(Curve), P2: Jacobian(Curve)) void {
         _ = run_code(Curve, P1, P2, &code._add);
     }
 
@@ -705,39 +705,39 @@ pub const ecc = struct {
         return result;
     }
 
-    fn MUL31(x: u32, y: u32) callconv(.Inline) u64 {
+    inline fn MUL31(x: u32, y: u32) u64 {
         return @as(u64, x) * @as(u64, y);
     }
 
-    fn MUL31_lo(x: u32, y: u32) callconv(.Inline) u32 {
+    inline fn MUL31_lo(x: u32, y: u32) u32 {
         return (x *% y) & 0x7FFFFFFF;
     }
 
-    fn MUX(ctl: u32, x: u32, y: u32) callconv(.Inline) u32 {
+    inline fn MUX(ctl: u32, x: u32, y: u32) u32 {
         return y ^ (@as(u32, @bitCast(-@as(i32, @bitCast(ctl)))) & (x ^ y));
     }
-    fn NOT(ctl: u32) callconv(.Inline) u32 {
+    inline fn NOT(ctl: u32) u32 {
         return ctl ^ 1;
     }
-    fn NEQ(x: u32, y: u32) callconv(.Inline) u32 {
+    inline fn NEQ(x: u32, y: u32) u32 {
         const q = x ^ y;
         return (q | @as(u32, @bitCast(-@as(i32, @bitCast(q))))) >> 31;
     }
-    fn EQ(x: u32, y: u32) callconv(.Inline) u32 {
+    inline fn EQ(x: u32, y: u32) u32 {
         const q = x ^ y;
         return NOT((q | @as(u32, @bitCast(-@as(i32, @bitCast(q))))) >> 31);
     }
-    fn CMP(x: u32, y: u32) callconv(.Inline) i32 {
+    inline fn CMP(x: u32, y: u32) i32 {
         return @as(i32, @bitCast(GT(x, y))) | -@as(i32, @bitCast(GT(y, x)));
     }
-    fn GT(x: u32, y: u32) callconv(.Inline) u32 {
+    inline fn GT(x: u32, y: u32) u32 {
         const z = y -% x;
         return (z ^ ((x ^ y) & (x ^ z))) >> 31;
     }
-    fn LT(x: u32, y: u32) callconv(.Inline) u32 {
+    inline fn LT(x: u32, y: u32) u32 {
         return GT(y, x);
     }
-    fn GE(x: u32, y: u32) callconv(.Inline) u32 {
+    inline fn GE(x: u32, y: u32) u32 {
         return NOT(GT(y, x));
     }
 
@@ -776,7 +776,7 @@ pub const ecc = struct {
         return q;
     }
 
-    fn div(hi: u32, lo: u32, d: u32) callconv(.Inline) u32 {
+    inline fn div(hi: u32, lo: u32, d: u32) u32 {
         var r: u32 = undefined;
         return divrem(hi, lo, d, &r);
     }
@@ -879,7 +879,7 @@ pub const ecc = struct {
                 if (len >= 4) {
                     buf -= 4;
                     len -= 4;
-                    mem.writeIntBig(u32, @as([*]u8, @ptrFromInt(buf))[0..4], z);
+                    mem.writeInt(u32, @as([*]u8, @ptrFromInt(buf))[0..4], z, .big);
                 } else {
                     switch (len) {
                         3 => {
