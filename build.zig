@@ -1,9 +1,9 @@
-const Builder = @import("std").build.Builder;
+const Builder = @import("std").Build;
 
 pub fn build(b: *Builder) void {
     const optimize = b.standardOptimizeOption(.{});
     _ = b.addModule("iguanaTLS", .{
-        .source_file = .{ .path = "src/main.zig" },
+        .root_source_file = .{ .path = "src/main.zig" },
     });
     var main_tests = b.addTest(.{
         .root_source_file = .{ .path = "src/main.zig" },
