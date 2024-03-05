@@ -216,7 +216,8 @@ pub fn ctr(
         mem.writeInt(u128, &counter, counterInt.*, endian);
 
         var pad = [_]u8{0} ** block_length;
-        @memcpy(&pad, src[start_idx..][cur_idx..]);
+        const src_index = src[start_idx..][cur_idx..];
+        @memcpy(pad[0 .. remaining - cur_idx], src_index);
         block_cipher.xor(&pad, &pad, counter);
         @memcpy(dst[start_idx..][cur_idx..], pad[0 .. remaining - cur_idx]);
 
